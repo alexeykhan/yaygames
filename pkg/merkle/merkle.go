@@ -3,7 +3,6 @@ package merkle
 import (
 	"bytes"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -11,7 +10,7 @@ type (
 	// Tree defines merkle tree basic functions.
 	Tree interface {
 		GetProof(leaf []byte) [][]byte
-		GetHexProof(leaf []byte) []string
+		GetHexProof(leaf []byte) [][32]byte
 	}
 
 	// HashFunc defines hash function signature.
@@ -122,12 +121,12 @@ func (t *tree) GetProof(leaf []byte) (proof [][]byte) {
 }
 
 // GetHexProof returns merkle proof for a leaf in a hex format.
-func (t *tree) GetHexProof(leaf []byte) []string {
+func (t *tree) GetHexProof(leaf []byte) [][32]byte {
 	dataProof := t.GetProof(leaf)
 
-	proof := make([]string, len(dataProof))
+	proof := make([][32]byte, len(dataProof))
 	for i, p := range dataProof {
-		proof[i] = hexutil.Encode(p)
+		copy(proof[i][:], p)
 	}
 
 	return proof
