@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/miguelmota/go-solidity-sha3"
 
@@ -70,7 +71,8 @@ func printMerkleProof(path string) (err error) {
 	}
 
 	tree := merkle.NewTree(leaves, merkle.Options{SortPairs: true})
-	fmt.Println(tree.GetHexProof(leaves[0]))
+	mergedArray := strings.Join(tree.GetHexProof(leaves[0]), ",")
+	fmt.Printf("[%s]", mergedArray)
 
 	return
 }
