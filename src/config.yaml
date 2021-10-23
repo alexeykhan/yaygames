@@ -1,0 +1,9 @@
+merkle:
+  endpoint: "https://data-seed-prebsc-1-s1.binance.org:8545"
+  contract: "0xCd71C520CB6358D3B455f1d018813FF667001618"
+  filepath: "./src/mercleTreeData.json"
+
+daemon:
+  endpoint: "https://api.avax.network/ext/bc/C/rpc"
+  contract: "0xC5FbbbFdb6883Ed45b77240B2aB7dfc9900f3B8E"
+  interval: 3s

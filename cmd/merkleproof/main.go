@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/miguelmota/go-solidity-sha3"
 
+	"github.com/alexeykhan/yaygames/internal/config"
 	"github.com/alexeykhan/yaygames/pkg/merkle"
 	"github.com/alexeykhan/yaygames/pkg/yayvesting"
 )
@@ -32,51 +33,42 @@ type (
 	}
 )
 
-const (
-	rpcBSCEndpoint = "https://data-seed-prebsc-1-s1.binance.org:8545"
-	contractHex    = "0xCd71C520CB6358D3B455f1d018813FF667001618"
-	sourceFilePath = "./src/mercleTreeData.json"
-)
+const configFilePath = "./src/config.yaml"
 
 func main() {
-	if err := run(sourceFilePath); err != nil {
+	if err := run(); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(path string) (err error) {
-	var (
-		mercleTreeFile  *os.File
-		mercleTreeBytes []byte
-		data            Data
-		valid           bool
-	)
+func run() error {
+	cfg, err := config.New(configFilePath)
+	if err != nil {
+		return fmt.Errorf("get config: %w", err)
+	}
 
 	// Open source file.
-	if mercleTreeFile, err = os.Open(path); err != nil {
+	mercleTreeFile, err := os.Open(cfg.MerkleFilePath())
+	if err != nil {
 		return fmt.Errorf("open file: %w", err)
 	}
-	defer func() {
-		if closeErr := mercleTreeFile.Close(); closeErr != nil {
-			if err == nil {
-				err = fmt.Errorf("close file: %w", closeErr)
-			} else {
-				err = fmt.Errorf("close file: %w: %v", closeErr, err)
-			}
-		}
-	}()
+	defer mercleTreeFile.Close()
 
 	// Read from file.
-	if mercleTreeBytes, err = ioutil.ReadAll(mercleTreeFile); err != nil {
+	log.Println("Reading data from source file...")
+	mercleTreeBytes, err := ioutil.ReadAll(mercleTreeFile)
+	if err != nil {
 		return fmt.Errorf("read file data: %v", err)
 	}
 
 	// Unmarshal JSON to struct.
-	if err = json.Unmarshal(mercleTreeBytes, &data); err != nil {
+	data := Data{}
+	if err := json.Unmarshal(mercleTreeBytes, &data); err != nil {
 		return fmt.Errorf("unmarshal file data: %v", err)
 	}
 
 	// Hash initial leaves.
+	log.Println("Hashing initial leaves...")
 	leaves := make([][]byte, len(data.Nodes))
 	for i, node := range data.Nodes {
 		category := strconv.FormatInt(node.Category, 10)
@@ -88,6 +80,7 @@ func run(path string) (err error) {
 	}
 
 	// Build merkle tree from data.
+	log.Println("Building Merkle Tree from leaves...")
 	tree := merkle.NewTree(leaves, merkle.Options{SortPairs: true})
 
 	// Format data into hex strings.
@@ -99,40 +92,35 @@ func run(path string) (err error) {
 
 	// Display proof leaves.
 	mergedArray := strings.Join(proof, ",")
-	fmt.Printf("Generated Proof:\n[%s]\n\n", mergedArray)
+	log.Printf("Generated Proof: [%s]\n", mergedArray)
 
 	// Check claim.
-	if valid, err = checkClaim(data.Nodes[0], treeHexProof); err != nil {
+	client, err := ethclient.Dial(cfg.MerkleEndpoint())
+	if err != nil {
+		return fmt.Errorf("init client: %w", err)
+	}
+
+	contractAddress := common.HexToAddress(cfg.MerkleContract())
+	instance, err := yayvesting.NewYayvesting(contractAddress, client)
+	if err != nil {
+		return fmt.Errorf("init contract instance: %w", err)
+	}
+
+	log.Println("Checking claim via smart contract...")
+	valid, err := instance.CheckClaim(nil,
+		common.HexToAddress(data.Nodes[0].Address),
+		big.NewInt(data.Nodes[0].Category),
+		big.NewInt(data.Nodes[0].Amount),
+		treeHexProof)
+	if err != nil {
 		return fmt.Errorf("check claim: %w", err)
 	}
 
 	if valid {
-		fmt.Println("Huray! Valid proof.")
+		log.Println("Huray! Valid proof.")
 	} else {
-		fmt.Println("Whoops! Invalid proof.")
+		log.Println("Whoops! Invalid proof.")
 	}
 
-	return
-}
-
-func checkClaim(node Node, proof [][32]byte) (valid bool, err error) {
-	var (
-		client   *ethclient.Client
-		instance *yayvesting.Yayvesting
-	)
-
-	if client, err = ethclient.Dial(rpcBSCEndpoint); err != nil {
-		return false, err
-	}
-
-	contractAddress := common.HexToAddress(contractHex)
-	if instance, err = yayvesting.NewYayvesting(contractAddress, client); err != nil {
-		return false, err
-	}
-
-	return instance.CheckClaim(nil,
-		common.HexToAddress(node.Address),
-		big.NewInt(node.Category),
-		big.NewInt(node.Amount),
-		proof)
+	return nil
 }

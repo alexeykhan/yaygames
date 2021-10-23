@@ -1,4 +1,4 @@
 /bin
-/vendor
+/build
 /.idea
 .DS_STORE
